@@ -1,0 +1,6 @@
+#!/bin/bash
+set -e
+
+export PYTHONPATH=%INSTALL_DIR%
+
+python3 %INSTALL_DIR%/tflite_pack/rewrite_model.py $@
