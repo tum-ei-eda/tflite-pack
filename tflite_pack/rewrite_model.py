@@ -370,7 +370,8 @@ def main():
         count = len(rewriter.getListofOps())
         print(f"Found {count} layers.")
 
-    rewriter.saveModelToFile(args.out)
+    if not args.noop:
+        rewriter.saveModelToFile(args.out)
 
 
 if __name__ == "__main__":
