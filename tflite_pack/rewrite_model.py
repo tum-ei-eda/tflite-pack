@@ -17,8 +17,10 @@
 # limitations under the License.
 #
 
-import sys
-import struct
+import os
+import logging
+import argparse
+# import struct
 
 import flatbuffers
 
@@ -27,16 +29,12 @@ import tumeda_tflite as tflite
 import tumeda_tflite.Model
 import tumeda_tflite.QuantizationDetails
 import tumeda_tflite.CustomQuantization
-from tumeda_tflite.BuiltinOperator import BuiltinOperator as OpType
-from tumeda_tflite.TensorType import TensorType as TType
+# from tumeda_tflite.BuiltinOperator import BuiltinOperator as OpType
+# from tumeda_tflite.TensorType import TensorType as TType
 from tumeda_tflite.Operator import OperatorT
 import numpy as np
 
-import os
-import logging
-import argparse
 
-#logging.basicConfig(format='[%(asctime)s]::%(pathname)s:%(lineno)d::%(levelname)s - %(message)s', level=logging.INFO)
 logging.basicConfig(format='[%(asctime)s]::%(pathname)s:%(lineno)d::%(levelname)s - %(message)s', level=logging.DEBUG)
 
 
@@ -48,20 +46,17 @@ class TfLiteRewrite:
         model = tflite.Model.Model.GetRootAsModel(buf, 0)
         return tflite.Model.ModelT.InitFromObj(model)
 
-
     def loadModelFromFile(filename):
         """ Load tflite flatbuffer file to object tree """
         with open(filename, "rb") as f:
             buf = bytearray(f.read())
         return TfLiteRewrite.loadModelFromBuf(buf)
 
-
     def saveModelToBuf(self):
         """ Save object tree to tflite flatbuffer """
         b = flatbuffers.Builder(1024)
         b.Finish(self.modelT.Pack(b), file_identifier=b'TFL3')
         return b.Output()
-
 
     def saveModelToFile(self, filename):
         """ Save object tree to tflite flatbuffer file """
@@ -71,7 +66,7 @@ class TfLiteRewrite:
     def __init__(self, model):
         """ Constructor of TfLiteRewrite """
         logging.debug("Initializing TfLite Flatbuffer Rewriter...")
-        if isinstance(model ,tflite_original.Model):
+        if isinstance(model, tflite_original.Model):
             casted_model = tflite.Model.Model()
             casted_model._tab = model._tab
             self.modelT = tflite.Model.ModelT.InitFromObj(casted_model)
@@ -84,125 +79,119 @@ class TfLiteRewrite:
         else:
             raise RuntimeError("Model has to be of type str (filename) or bytearray")
 
+    # def applyPacking(self):
+    #     """ Packs all eligible tensors in the given model (originally written by Rafael Stahl) """
 
+    #     def packTensor(t):
+    #         """ Apply packing to tensor (originally written by Rafael Stahl) """
+    #         PACKED_SUB8BIT_UNIFORM_DETAILS_MAGIC = 0xa4592d92
+    #         # TODO get number of pack bits automatically or allow configuration
+    #         bitsPerItem = 4
+    #         containerBits = 8
+    #         packedMinorDims = 1
+    #         signedData = True
 
+    #         if signedData:
+    #             minVal = -(bitsPerItem - 1)**2
+    #             maxVal = (bitsPerItem - 1)**2 - 1
+    #         else:
+    #             minVal = 0
+    #             maxVal = bitsPerItem**2 - 1
 
-    def applyPacking(self):
-        """ Packs all eligible tensors in the given model (originally written by Rafael Stahl) """
+    #         # Serialize custom quantization data.
+    #         data = struct.pack("I", PACKED_SUB8BIT_UNIFORM_DETAILS_MAGIC)
+    #         data += struct.pack("B", bitsPerItem)
+    #         data += struct.pack("B", containerBits)
+    #         data += struct.pack("B", packedMinorDims)
+    #         data += b"\x00\x00\x00\x00\x00"
 
-        def packTensor(t):
-            """ Apply packing to tensor (originally written by Rafael Stahl) """
-            PACKED_SUB8BIT_UNIFORM_DETAILS_MAGIC = 0xa4592d92
-            # TODO get number of pack bits automatically or allow configuration
-            bitsPerItem = 4
-            containerBits = 8
-            packedMinorDims = 1
-            signedData = True
+    #         # Edit quantization metadata to represent packed data.
+    #         customQuant = tflite.CustomQuantization.CustomQuantizationT()
+    #         customQuant.custom = [c for c in data]
+    #         t.quantization.detailsType = QDetails.CustomQuantization
+    #         t.quantization.details = customQuant
 
-            if signedData:
-                minVal = -(bitsPerItem - 1)**2
-                maxVal = (bitsPerItem - 1)**2 - 1
-            else:
-                minVal = 0
-                maxVal = bitsPerItem**2 - 1
+    #         # Determine run length.
+    #         packingRunLength = 1
+    #         # TODO is this correct? array does not seem to have NHWC format
+    #         for i, dimLen in enumerate(reversed(t.shape)):
+    #             packingRunLength *= dimLen
+    #             if i + 1 >= packedMinorDims:
+    #                 break
 
-            # Serialize custom quantization data.
-            data = struct.pack("I", PACKED_SUB8BIT_UNIFORM_DETAILS_MAGIC)
-            data += struct.pack("B", bitsPerItem)
-            data += struct.pack("B", containerBits)
-            data += struct.pack("B", packedMinorDims)
-            data += b"\x00\x00\x00\x00\x00"
+    #         # Pack tensor data.
+    #         packedData = []
+    #         buf = 0
+    #         bitsInContainer = 0
+    #         mask = (1 << bitsPerItem) - 1
+    #         for i, d in enumerate(self.modelT.buffers[t.buffer].data):
+    #             d = max(minVal, min(d, maxVal))
 
-            # Edit quantization metadata to represent packed data.
-            customQuant = tflite.CustomQuantization.CustomQuantizationT()
-            customQuant.custom = [c for c in data]
-            t.quantization.detailsType = QDetails.CustomQuantization
-            t.quantization.details = customQuant
+    #             buf |= (d & mask) << bitsInContainer
+    #             bitsInContainer += bitsPerItem
+    #             # Flush full or last container.
+    #             if (bitsInContainer + bitsPerItem > containerBits or
+    #                     i % packingRunLength == packingRunLength - 1):
+    #                 fmtLookup = {8: "B", 16: "H", 32: "I"}
+    #                 packedData += struct.pack(fmtLookup[containerBits], buf)
 
-            # Determine run length.
-            packingRunLength = 1
-            # TODO is this correct? array does not seem to have NHWC format
-            for i, dimLen in enumerate(reversed(t.shape)):
-                packingRunLength *= dimLen
-                if i + 1 >= packedMinorDims:
-                    break
+    #                 bitsInContainer = 0
+    #                 buf = 0
 
-            # Pack tensor data.
-            packedData = []
-            buf = 0
-            bitsInContainer = 0
-            mask = (1 << bitsPerItem) - 1
-            for i, d in enumerate(self.modelT.buffers[t.buffer].data):
-                d = max(minVal, min(d, maxVal))
+    #         assert bitsInContainer == 0, "leftover data"
 
-                buf |= (d & mask) << bitsInContainer
-                bitsInContainer += bitsPerItem
-                # Flush full or last container.
-                if (bitsInContainer + bitsPerItem > containerBits or
-                        i % packingRunLength == packingRunLength - 1):
-                    fmtLookup = {8: "B", 16: "H", 32: "I"}
-                    packedData += struct.pack(fmtLookup[containerBits], buf)
+    #         if len(packedData) > len(self.modelT.buffers[t.buffer].data):
+    #             print("Warning: Packing increased the size of tensor:", t.name)
 
-                    bitsInContainer = 0
-                    buf = 0
+    #         self.modelT.buffers[t.buffer].data = [c for c in packedData]
 
-            assert bitsInContainer == 0, "leftover data"
+    #     tensorsToOps = {}
 
-            if len(packedData) > len(self.modelT.buffers[t.buffer].data):
-                print("Warning: Packing increased the size of tensor:", t.name)
+    #     for g in self.modelT.subgraphs:
+    #         for op in g.operators:
+    #             for tIndexList in [op.inputs, op.outputs, op.intermediates]:
+    #                 if type(tIndexList) == type(None):
+    #                     continue
+    #                 for i in tIndexList:
+    #                     tensorsToOps.setdefault(i, []).append(op)
 
-            self.modelT.buffers[t.buffer].data = [c for c in packedData]
+    #         # Get candidates for packing.
+    #         for tIndex, t in enumerate(g.tensors):
+    #             # TODO more types could be supported
+    #             if t.type not in [TType.UINT8, TType.INT8]:
+    #                 continue
 
-        tensorsToOps = {}
+    #             if not t.quantization:
+    #                 continue
 
-        for g in self.modelT.subgraphs:
-            for op in g.operators:
-                for tIndexList in [op.inputs, op.outputs, op.intermediates]:
-                    if type(tIndexList) == type(None):
-                        continue
-                    for i in tIndexList:
-                        tensorsToOps.setdefault(i, []).append(op)
+    #             # Skip if tensor uses custom quantization.
+    #             if t.quantization.details:
+    #                 continue
 
-            # Get candidates for packing.
-            for tIndex, t in enumerate(g.tensors):
-                # TODO more types could be supported
-                if t.type not in [TType.UINT8, TType.INT8]:
-                    continue
+    #             if t.buffer == 0 or type(self.modelT.buffers[t.buffer].data) == type(None):
+    #                 continue
 
-                if not t.quantization:
-                    continue
+    #             # Check if all usages of this tensor are okay with packing.
+    #             packable = True
+    #             for op in tensorsToOps[tIndex]:
+    #                 opCode = self.modelT.operatorCodes[op.opcodeIndex].builtinCode
+    #                 if opCode not in [OpType.FULLY_CONNECTED, OpType.CONV_2D, OpType.DEPTHWISE_CONV_2D]:
+    #                     packable = False
 
-                # Skip if tensor uses custom quantization.
-                if t.quantization.details:
-                    continue
+    #                 # TODO detect inconsistent packed minor dims
 
-                if t.buffer == 0 or type(self.modelT.buffers[t.buffer].data) == type(None):
-                    continue
+    #             if not packable:
+    #                 continue
 
-                # Check if all usages of this tensor are okay with packing.
-                packable = True
-                for op in tensorsToOps[tIndex]:
-                    opCode = self.modelT.operatorCodes[op.opcodeIndex].builtinCode
-                    if opCode not in [OpType.FULLY_CONNECTED, OpType.CONV_2D, OpType.DEPTHWISE_CONV_2D]:
-                        packable = False
-
-                    # TODO detect inconsistent packed minor dims
-
-                if not packable:
-                    continue
-
-                packTensor(t, m)
-
+    #             packTensor(t, m)
 
     def mergeModels(models):
         """ Merge supplied models to a larger one (if compatible) """
         raise NotImplementedError
 
-
     def getListofOps(self):
         """ Returns a list of up incides in the model """
         return self.modelT.subgraphs[0].operators
-
 
     def dropOps(self, indices: list):
         """ Remove ops in list of indices from the model """
@@ -213,7 +202,6 @@ class TfLiteRewrite:
             assert idx >= 0 and idx < len(ops)
             # Unfortunately ops can not be dropped completely, we just init a blank op instead
             self.modelT.subgraphs[0].operators[idx] = OperatorT()
-
 
     def dropUnusedData(self):
         """ Remove all data not related to any operators in the model """
@@ -237,7 +225,7 @@ class TfLiteRewrite:
                 used.append(metadata.buffer)
 
         used = list(dict.fromkeys(used))
-        not_used = [ i for i in range(0,len(g.tensors)) if i not in used]
+        not_used = [i for i in range(0, len(g.tensors)) if i not in used]
 
         for idx in not_used:
             buf = g.tensors[idx].buffer
@@ -274,11 +262,9 @@ class TfLiteRewrite:
         for buf in bufs:
             self.modelT.buffers[buf].data = None
 
-
-
     def extractOps(self, idx):
         """ Build new model based in the consecutive list of operator indices """
-        tensorsToOps = {}
+        # tensorsToOps = {}
         g = self.modelT.subgraphs[0]  # Only supports one subgraph at the moment
         op = g.operators[idx]
 
@@ -314,8 +300,8 @@ class TfLiteRewrite:
         g.tensors = tensors_new
         op.inputs = np.array(inputs_new, dtype=op.inputs.dtype)
         op.outputs = np.array(outputs_new, dtype=op.outputs.dtype)
-        g_inputs_new=[ inp for inp in op.inputs if self.modelT.buffers[inp+1].data is None]
-        g_outputs_new=op.outputs
+        g_inputs_new = [inp for inp in op.inputs if self.modelT.buffers[inp+1].data is None]
+        g_outputs_new = op.outputs
         g.inputs = np.array(g_inputs_new, dtype=g.inputs.dtype)
         g.outputs = np.array(g_outputs_new, dtype=g.outputs.dtype)
         op.intermediates = intermediates_new
@@ -347,22 +333,22 @@ def main():
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose mode (default: %(default)s)')
     parser.add_argument('--count-layers', action='store_true', help='Count number of layers (default: %(default)s)')
     args = parser.parse_args()
-    #if args.verbose:
-    #    logging.basicConfig(level=logging.DEBUG)
-    # TODO: fix this
+    # if args.verbose:
+    #     logging.basicConfig(level=logging.DEBUG)
+    #  TODO: fix this
 
     assert args.model is not None
     rewriter = TfLiteRewrite(args.model)
 
     if not args.noop:
-        if args.pack:
-            rewriter.applyPacking()
+        # if args.pack:
+        #     rewriter.applyPacking()
         if args.drop != '[]':
-            drop_indices = list(map(int,list(filter(None, args.drop.split(',')))))
+            drop_indices = list(map(int, list(filter(None, args.drop.split(',')))))
         else:
             drop_indices = []
         if args.keep != '[]':
-            keep_indices = list(map(int,list(filter(None, args.keep.split(',')))))
+            keep_indices = list(map(int, list(filter(None, args.keep.split(',')))))
         else:
             keep_indices = []
         if len(drop_indices) > 0 and len(keep_indices) > 0:
