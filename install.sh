@@ -11,6 +11,8 @@ else
   dest=$1
 fi
 
+dest=$(readlink -f $dest)
+
 mkdir -p $dest
 cd "$dest"
 if [ -d flatbuffers ]
@@ -37,7 +39,11 @@ for f in *.py; do sed -e'1,$s/tflite\./tumeda_tflite./g' -i $f; done
 cd -
 
 mkdir -p $dest/tflite_pack
-cp -r $here/tflite_pack/* $dest/tflite_pack
+
+if [[ "$here" != "$dest" ]]
+then
+    cp -r $here/tflite_pack/* $dest/tflite_pack
+fi
 
 echo sed -e "s~%INSTALL_DIR%~$dest~g" $here/run.sh.template
 sed -e "s~%INSTALL_DIR%~$dest~g" $here/run.sh.template > $dest/run.sh
