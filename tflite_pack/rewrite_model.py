@@ -20,6 +20,7 @@
 import os
 import logging
 import argparse
+
 # import struct
 
 import flatbuffers
@@ -29,42 +30,43 @@ import tumeda_tflite as tflite
 import tumeda_tflite.Model
 import tumeda_tflite.QuantizationDetails
 import tumeda_tflite.CustomQuantization
+
 # from tumeda_tflite.BuiltinOperator import BuiltinOperator as OpType
 # from tumeda_tflite.TensorType import TensorType as TType
 from tumeda_tflite.Operator import OperatorT
 import numpy as np
 
 
-logging.basicConfig(format='[%(asctime)s]::%(pathname)s:%(lineno)d::%(levelname)s - %(message)s', level=logging.DEBUG)
+logging.basicConfig(format="[%(asctime)s]::%(pathname)s:%(lineno)d::%(levelname)s - %(message)s", level=logging.DEBUG)
 
 
 class TfLiteRewrite:
-    """ TfLite Flatbuffer Rewriter """
+    """TfLite Flatbuffer Rewriter"""
 
     def loadModelFromBuf(buf):
-        """ Load tflite flatbuffer to object tree """
+        """Load tflite flatbuffer to object tree"""
         model = tflite.Model.Model.GetRootAsModel(buf, 0)
         return tflite.Model.ModelT.InitFromObj(model)
 
     def loadModelFromFile(filename):
-        """ Load tflite flatbuffer file to object tree """
+        """Load tflite flatbuffer file to object tree"""
         with open(filename, "rb") as f:
             buf = bytearray(f.read())
         return TfLiteRewrite.loadModelFromBuf(buf)
 
     def saveModelToBuf(self):
-        """ Save object tree to tflite flatbuffer """
+        """Save object tree to tflite flatbuffer"""
         b = flatbuffers.Builder(1024)
-        b.Finish(self.modelT.Pack(b), file_identifier=b'TFL3')
+        b.Finish(self.modelT.Pack(b), file_identifier=b"TFL3")
         return b.Output()
 
     def saveModelToFile(self, filename):
-        """ Save object tree to tflite flatbuffer file """
+        """Save object tree to tflite flatbuffer file"""
         with open(filename, "wb") as f:
             f.write(self.saveModelToBuf())
 
     def __init__(self, model):
-        """ Constructor of TfLiteRewrite """
+        """Constructor of TfLiteRewrite"""
         logging.debug("Initializing TfLite Flatbuffer Rewriter...")
         if isinstance(model, tflite_original.Model):
             casted_model = tflite.Model.Model()
@@ -186,15 +188,15 @@ class TfLiteRewrite:
     #             packTensor(t, m)
 
     def mergeModels(models):
-        """ Merge supplied models to a larger one (if compatible) """
+        """Merge supplied models to a larger one (if compatible)"""
         raise NotImplementedError
 
     def getListofOps(self):
-        """ Returns a list of up incides in the model """
+        """Returns a list of up incides in the model"""
         return self.modelT.subgraphs[0].operators
 
     def dropOps(self, indices: list):
-        """ Remove ops in list of indices from the model """
+        """Remove ops in list of indices from the model"""
         g = self.modelT.subgraphs[0]
         ops = g.operators
 
@@ -204,7 +206,7 @@ class TfLiteRewrite:
             self.modelT.subgraphs[0].operators[idx] = OperatorT()
 
     def dropUnusedData(self):
-        """ Remove all data not related to any operators in the model """
+        """Remove all data not related to any operators in the model"""
         g = self.modelT.subgraphs[0]
         ops = g.operators
 
@@ -232,7 +234,7 @@ class TfLiteRewrite:
             self.modelT.buffers[buf].data = None
 
     def dropData(self):
-        """ Remove all buffers from the model to reduce its size """
+        """Remove all buffers from the model to reduce its size"""
         for i in range(len(self.modelT.buffers)):
             self.modelT.buffers[i].data = None
 
@@ -253,7 +255,7 @@ class TfLiteRewrite:
         self.modelT.signatureDefs = None
 
     def dropMetadata(self):
-        """ Get rid of metadata buffers ain the model """
+        """Get rid of metadata buffers ain the model"""
         bufs = []
         if self.modelT.metadata:
             for metadata in self.modelT.metadata:
@@ -263,7 +265,7 @@ class TfLiteRewrite:
             self.modelT.buffers[buf].data = None
 
     def extractOps(self, idx):
-        """ Build new model based in the consecutive list of operator indices """
+        """Build new model based in the consecutive list of operator indices"""
         # tensorsToOps = {}
         g = self.modelT.subgraphs[0]  # Only supports one subgraph at the moment
         op = g.operators[idx]
@@ -280,7 +282,7 @@ class TfLiteRewrite:
             tensor_new = g.tensors[t]
             buffer_new = self.modelT.buffers[tensor_new.buffer]
             buffers_new.append(buffer_new)
-            tensor_new.buffer = i+1
+            tensor_new.buffer = i + 1
             tensors_new.append(tensor_new)
             inputs_new.append(i)
         for i, t in enumerate(op.outputs):
@@ -290,9 +292,9 @@ class TfLiteRewrite:
             tensor_new = g.tensors[t]
             buffer_new = self.modelT.buffers[tensor_new.buffer]
             buffers_new.append(buffer_new)
-            tensor_new.buffer = len(inputs_new)+i+1
+            tensor_new.buffer = len(inputs_new) + i + 1
             tensors_new.append(tensor_new)
-            outputs_new.append(len(inputs_new)+i)
+            outputs_new.append(len(inputs_new) + i)
         operatorCodes_new.append(self.modelT.operatorCodes[op.opcodeIndex])
         self.modelT.operatorCodes = operatorCodes_new
         # TODO: Handle metadata buffer properly
@@ -300,14 +302,14 @@ class TfLiteRewrite:
         g.tensors = tensors_new
         op.inputs = np.array(inputs_new, dtype=op.inputs.dtype)
         op.outputs = np.array(outputs_new, dtype=op.outputs.dtype)
-        g_inputs_new = [inp for inp in op.inputs if self.modelT.buffers[inp+1].data is None]
+        g_inputs_new = [inp for inp in op.inputs if self.modelT.buffers[inp + 1].data is None]
         g_outputs_new = op.outputs
         g.inputs = np.array(g_inputs_new, dtype=g.inputs.dtype)
         g.outputs = np.array(g_outputs_new, dtype=g.outputs.dtype)
         op.intermediates = intermediates_new
         op.opcodeIndex = 0
         if self.modelT.metadata:
-            self.modelT.metadata[0].buffer = len(self.modelT.buffers)-1
+            self.modelT.metadata[0].buffer = len(self.modelT.buffers) - 1
         self.modelT.subgraphs[0].operators = [op]
         return self.modelT
 
@@ -315,23 +317,54 @@ class TfLiteRewrite:
     def printModel(m):
         import jsonpickle
         import yaml
+
         s = jsonpickle.encode(m)
         print(yaml.dump(yaml.load(s), indent=2))
 
 
 def main():
-    parser = argparse.ArgumentParser(description='TfLite Flatbuffer Rewriter')
-    parser.add_argument('model', metavar="MODEL", type=str, help='Flatbuffer file')
-    parser.add_argument('--out', '-o', type=str, default=os.path.join(os.getcwd(), 'output.tflite'), help='Output flatbuffer file (default: %(default)s)')
-    parser.add_argument('--print', dest='print_model', action='store_true', help='Print resulting model as YAML (default: %(default)s)')
-    parser.add_argument('--noop', '-n', action='store_true', help='Skip any transformations (default: %(default)s)')
-    parser.add_argument('--pack', '-p', action='store_true', help='Apply packing (default: %(default)s)')
-    parser.add_argument('--drop', '-d', metavar="DROP_LIST", type=str, default='[]', help='Comma-seperated list of node idx to remove from the model, does not alter layout (default: %(default)s)')
-    parser.add_argument('--keep', '-k', metavar="KEEP_LIST", type=str, default='[]', help='Comma-seperated list of consecutive node idx to keep in the model, updates layout to close gaps (default: %(default)s)')
-    parser.add_argument('--trim', dest='trim', action='store_true', help='Drop data/weights completely (default: %(default)s)')
-    parser.add_argument('--remove-meta', '-r', dest='remove_meta', action='store_true', help='Remove all names and strings from the model (default: %(default)s)')
-    parser.add_argument('--verbose', '-v', action='store_true', help='Verbose mode (default: %(default)s)')
-    parser.add_argument('--count-layers', action='store_true', help='Count number of layers (default: %(default)s)')
+    parser = argparse.ArgumentParser(description="TfLite Flatbuffer Rewriter")
+    parser.add_argument("model", metavar="MODEL", type=str, help="Flatbuffer file")
+    parser.add_argument(
+        "--out",
+        "-o",
+        type=str,
+        default=os.path.join(os.getcwd(), "output.tflite"),
+        help="Output flatbuffer file (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--print", dest="print_model", action="store_true", help="Print resulting model as YAML (default: %(default)s)"
+    )
+    parser.add_argument("--noop", "-n", action="store_true", help="Skip any transformations (default: %(default)s)")
+    parser.add_argument("--pack", "-p", action="store_true", help="Apply packing (default: %(default)s)")
+    parser.add_argument(
+        "--drop",
+        "-d",
+        metavar="DROP_LIST",
+        type=str,
+        default="[]",
+        help="Comma-seperated list of node idx to remove from the model, does not alter layout (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--keep",
+        "-k",
+        metavar="KEEP_LIST",
+        type=str,
+        default="[]",
+        help="Comma-seperated list of consecutive node idx to keep in the model, updates layout to close gaps (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--trim", dest="trim", action="store_true", help="Drop data/weights completely (default: %(default)s)"
+    )
+    parser.add_argument(
+        "--remove-meta",
+        "-r",
+        dest="remove_meta",
+        action="store_true",
+        help="Remove all names and strings from the model (default: %(default)s)",
+    )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose mode (default: %(default)s)")
+    parser.add_argument("--count-layers", action="store_true", help="Count number of layers (default: %(default)s)")
     args = parser.parse_args()
     # if args.verbose:
     #     logging.basicConfig(level=logging.DEBUG)
@@ -343,12 +376,12 @@ def main():
     if not args.noop:
         # if args.pack:
         #     rewriter.applyPacking()
-        if args.drop != '[]':
-            drop_indices = list(map(int, list(filter(None, args.drop.split(',')))))
+        if args.drop != "[]":
+            drop_indices = list(map(int, list(filter(None, args.drop.split(",")))))
         else:
             drop_indices = []
-        if args.keep != '[]':
-            keep_indices = list(map(int, list(filter(None, args.keep.split(',')))))
+        if args.keep != "[]":
+            keep_indices = list(map(int, list(filter(None, args.keep.split(",")))))
         else:
             keep_indices = []
         if len(drop_indices) > 0 and len(keep_indices) > 0:
@@ -357,7 +390,7 @@ def main():
             rewriter.dropOps(drop_indices)
             rewriter.dropUnusedData()
         elif len(keep_indices) > 1:
-            if sorted(keep_indices) != list(range(min(keep_indices), max(keep_indices)+1)):
+            if sorted(keep_indices) != list(range(min(keep_indices), max(keep_indices) + 1)):
                 raise RuntimeError("{} is not a list of consecutive indices.".format(keep_indices))
             raise NotImplementedError
         elif len(keep_indices) == 1:
