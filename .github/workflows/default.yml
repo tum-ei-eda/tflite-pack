@@ -54,11 +54,11 @@ jobs:
         pip3 install -r requirements.txt
     - name: Install
       run: |
-        ./install ${{ matrix.dest }}
+        ./install.sh ${{ matrix.dest }}
     - name: Download model
       run: |
         wget https://github.com/tum-ei-eda/mlonmcu-models/raw/main/${{ matrix.model }}/${{ matrix.model }}.tflite
     - name: Run
       run: |
         cd ${{ matrix.dest }}
-        ./run ${{ matrix.args }}
+        ./run.sh ${{ matrix.args }}
