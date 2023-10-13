@@ -60,5 +60,5 @@ jobs:
         wget https://github.com/tum-ei-eda/mlonmcu-models/raw/main/${{ matrix.model }}/${{ matrix.model }}.tflite
     - name: Run
       run: |
-        cd ${{ matrix.dest }}
-        ./run.sh ${{ matrix.model }}.tflite ${{ matrix.args }}
+        test -z ${{ matrix.dest }} || cd ${{ matrix.dest }}
+        ./run.sh ${{ github.workspace }}/${{ matrix.model }}.tflite ${{ matrix.args }}
