@@ -351,7 +351,7 @@ def main():
         metavar="KEEP_LIST",
         type=str,
         default="[]",
-        help="Comma-seperated list of consecutive node idx to keep in the model, updates layout to close gaps (default: %(default)s)",
+        help="Comma-seperated list of consecutive node idx to keep in the model, close gaps (default: %(default)s)",
     )
     parser.add_argument(
         "--trim", dest="trim", action="store_true", help="Drop data/weights completely (default: %(default)s)"
