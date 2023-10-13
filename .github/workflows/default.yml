@@ -38,6 +38,7 @@ jobs:
         dest: ["", ".", "tflp", "tflp/", "./tflp", "/tmp/tflp"]
         model: ["resnet"]
         args: ["--noop --count-layers", "--out out.tflite --keep 3 --verbose"]  # --keep 1,2,3 currently not supported
+      fail-fast: false
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
