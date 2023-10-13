@@ -61,4 +61,4 @@ jobs:
     - name: Run
       run: |
         cd ${{ matrix.dest }}
-        ./run.sh ${{ matrix.args }}
+        ./run.sh ${{ matrix.model }}.tflite ${{ matrix.args }}
